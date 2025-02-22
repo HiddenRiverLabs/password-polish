@@ -1,9 +1,9 @@
 import { CommonModule, DatePipe } from '@angular/common';
-import { Component, TemplateRef, QueryList, ViewChildren } from '@angular/core';
+import { Component, TemplateRef, QueryList, ViewChildren, ViewChild } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
-import { NgbOffcanvas } from '@ng-bootstrap/ng-bootstrap';
+import { NgbCarousel, NgbCarouselConfig, NgbCarouselModule, NgbOffcanvas } from '@ng-bootstrap/ng-bootstrap';
 import * as openpgp from 'openpgp';
-import { AsyncPipe, DecimalPipe } from '@angular/common';
+import { AsyncPipe } from '@angular/common';
 import { Observable } from 'rxjs';
 import { NgbdSortableHeader, SortEvent } from './sortable.directive';
 import { FormsModule } from '@angular/forms';
@@ -12,22 +12,36 @@ import { LoginService } from './login.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, CommonModule, FormsModule, AsyncPipe, NgbHighlight, NgbdSortableHeader, NgbPaginationModule],
+  imports: [RouterOutlet, CommonModule, FormsModule, AsyncPipe, NgbHighlight, NgbdSortableHeader, NgbPaginationModule, NgbCarouselModule],
   templateUrl: './app.component.html',
   styleUrl: './app.component.css',
-  providers: [LoginService, DatePipe]
+  providers: [LoginService, DatePipe, NgbCarouselConfig]
 })
 export class AppComponent {
   logins$: Observable<ILogin[]>;
   total$: Observable<number>;
+  sourceOptions = ['ProtonPass'];
+  fileTypes: string[] = [];
+  selectedSource = '';
+  selectedFileType = '';
+  sourceOptionMap: Map<string, string[]> = new Map([
+    ['ProtonPass', ['PGP', 'JSON', 'CSV']]
+  ]);
+  password = '';
 
   @ViewChildren(NgbdSortableHeader) headers!: QueryList<NgbdSortableHeader>;
+  @ViewChild('carousel', { static: true }) carousel!: NgbCarousel;
 
   constructor(public service: LoginService,
+    public config: NgbCarouselConfig,
     private offcanvasService: NgbOffcanvas,
   ) {
     this.logins$ = service.logins$;
     this.total$ = service.total$;
+    config.showNavigationArrows = false;
+    config.showNavigationIndicators = false;
+    config.wrap = false;
+    config.interval = 0;
   }
 
   onSort({ column, direction }: SortEvent) {
@@ -46,34 +60,47 @@ export class AppComponent {
     this.offcanvasService.open(content, { position: 'bottom' });
   }
 
+  selectSource(selectedSource: string) {
+    this.fileTypes = this.sourceOptionMap.get(selectedSource) || [];
+    this.selectedFileType = '';
+  }
+
+  selectFileType(selectedFileType: string) {
+    this.selectedFileType = selectedFileType;
+  }
+
   async fileChange(event: any) {
     const file = event.target.files[0];
     if (file && file.name.endsWith('.pgp')) {
       const reader = new FileReader();
       reader.onload = async (e: any) => {
         const encryptedData = e.target.result;
-        const passphrase = 'testing123'; // Replace with your hardcoded passphrase
 
         const message = await openpgp.readMessage({
           armoredMessage: encryptedData
         });
+        try {
+          const { data: decrypted } = await openpgp.decrypt({
+            message,
+            passwords: [this.password],
+            format: 'binary'
+          });
 
-        const { data: decrypted } = await openpgp.decrypt({
-          message,
-          passwords: [passphrase],
-          format: 'binary'
-        });
-
-        const decoder = new TextDecoder();
-        const decryptedText = decoder.decode(decrypted);
-        // there's some prepended and appended data that needs to be removed
-        const start = decryptedText.indexOf('{');
-        const end = decryptedText.lastIndexOf('"}');
-        const trimmedData = decryptedText.substring(start, end + 2);
-        const jsonData = JSON.parse(trimmedData);
-        console.log(jsonData);
-        this.processLoginData(jsonData);
-        this.offcanvasService.dismiss();
+          const decoder = new TextDecoder();
+          const decryptedText = decoder.decode(decrypted);
+          // there's some prepended and appended data that needs to be removed
+          const start = decryptedText.indexOf('{');
+          const end = decryptedText.lastIndexOf('"}');
+          const trimmedData = decryptedText.substring(start, end + 2);
+          const jsonData = JSON.parse(trimmedData);
+          console.log(jsonData);
+          this.processLoginData(jsonData);
+          this.offcanvasService.dismiss();
+        } catch (e) {
+          this.offcanvasService.dismiss();
+          console.error(e);
+          return;
+        }
       };
       reader.readAsText(file);
     }

@@ -68,11 +68,59 @@
         <button type="button" class="btn-close" aria-label="Close" (click)="offcanvas.dismiss('Cross click')"></button>
     </div>
     <div class="offcanvas-body">
-        <div class="d-flex justify-content-center align-items-center">
-            <div class="form-group">
-                <label for="file">Select a file</label>
-                <input type="file" class="form-control" id="file" accept=".pgp" (change)="fileChange($event)">
-            </div>
-        </div>
+        <ngb-carousel #carousel>
+            <ng-template ngbSlide [id]="'source'">
+                <!--
+                Pick where you're importing from by clicking a button
+                -->
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="btn-group" role="group" aria-label="Select Password Source">
+                        @for (source of sourceOptions; track source) {
+                        <button type="button" class="btn btn-outline-primary bg-black" [title]="source"
+                            (click)="selectSource(source); carousel.select('fileType')">
+                            <img [src]="'icons/'+source+'Logo.svg'" [alt]="source" class="img-fluid" />
+                        </button>
+                        }
+                    </div>
+                </div>
+            </ng-template>
+            <ng-template ngbSlide [id]="'fileType'">
+                <!--
+                Pick file type being imported. If PGP, show and require password
+                -->
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="btn-group" role="group" aria-label="Select file type to import">
+                        @for (fileType of fileTypes; track fileType) {
+                        <button type="button" class="btn btn-primary" [title]="fileType"
+                            (click)="selectFileType(fileType); selectedFileType === 'PGP' ? carousel.select('PGP') : carousel.select('file')">
+                            {{fileType}}
+                        </button>
+                        }
+                    </div>
+                </div>
+            </ng-template>
+            <ng-template ngbSlide [id]="'PGP'">
+                <!--
+                Show file picker
+                -->
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" class="form-control" id="password" [(ngModel)]="password" />
+                        <button type="button" class="btn btn-primary mt-2" [disabled]="password === ''"
+                            (click)="carousel.select('file')">Next</button>
+                    </div>
+                </div>
+            </ng-template>
+            <ng-template ngbSlide [id]="'file'">
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="form-group">
+                        <label for="file">Select a file</label>
+                        <input type="file" class="form-control" id="file" accept=".{{selectedFileType.toLowerCase()}}"
+                            (change)="fileChange($event)">
+                    </div>
+                </div>
+            </ng-template>
+        </ngb-carousel>
     </div>
 </ng-template>
