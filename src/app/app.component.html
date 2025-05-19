@@ -48,7 +48,7 @@
                         [pageSize]="service.pageSize">
                     </ngb-pagination>
 
-                    <select class="form-select" style="width: auto" name="pageSize" [(ngModel)]="service.pageSize">
+                    <select class="form-select page-size-select" name="pageSize" [(ngModel)]="service.pageSize" title="Select page size">
                         <option [ngValue]="5">5 items per page</option>
                         <option [ngValue]="10">10 items per page</option>
                         <option [ngValue]="25">25 items per page</option>

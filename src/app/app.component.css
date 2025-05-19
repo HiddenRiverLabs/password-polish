@@ -5,6 +5,10 @@
     z-index: 1000;
 }
 
+.page-size-select {
+    width: auto;
+}
+
 :host ::ng-deep ul.pagination {
     margin-bottom: 0;
 }
