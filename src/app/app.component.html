@@ -33,11 +33,11 @@
                             <td>{{ login.password ? '**********': '---' }}</td>
                             <td><ngb-highlight [result]="login.modifyTime | date: 'short'"
                                     [term]="service.searchTerm" /></td>
-                            <td><ngb-highlight [result]="login.urls.toString()" [term]="service.searchTerm" /></td>
+                            <td>@for (url of login.urls; track url) {<a [href]="url" target="_blank" rel="noopener noreferrer"><ngb-highlight [result]="url" [term]="service.searchTerm" /></a>@if (!$last) {, }}</td>
                         </tr>
                         } @empty {
                         <tr>
-                            <td colspan="5" style="text-align: center">No logins found</td>
+                            <td colspan="5" class="text-center">No logins found</td>
                         </tr>
                         }
                     </tbody>
@@ -77,8 +77,8 @@
                     <div class="btn-group" role="group" aria-label="Select Password Source">
                         @for (source of sourceOptions; track source) {
                         <button type="button" class="btn btn-outline-primary bg-black" [title]="source"
-                            (click)="selectSource(source); carousel.select('fileType')">
-                            <img [src]="'icons/'+source+'Logo.svg'" [alt]="source" class="img-fluid" />
+                            (click)="selectSource(source); carousel.select('fileType')" [attr.aria-label]="source">
+                            <img [src]="'icons/'+source+'Logo.svg'" [alt]="source" [title]="source" class="img-fluid" />
                         </button>
                         }
                     </div>

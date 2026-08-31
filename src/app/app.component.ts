@@ -1,14 +1,38 @@
-import { CommonModule, DatePipe } from '@angular/common';
+import { CommonModule, DatePipe, AsyncPipe } from '@angular/common';
 import { Component, TemplateRef, QueryList, ViewChildren, ViewChild } from '@angular/core';
 import { RouterOutlet } from '@angular/router';
 import { NgbCarousel, NgbCarouselConfig, NgbCarouselModule, NgbOffcanvas } from '@ng-bootstrap/ng-bootstrap';
 import * as openpgp from 'openpgp';
-import { AsyncPipe } from '@angular/common';
 import { Observable } from 'rxjs';
 import { NgbdSortableHeader, SortEvent } from './sortable.directive';
 import { FormsModule } from '@angular/forms';
 import { NgbHighlight, NgbPaginationModule } from '@ng-bootstrap/ng-bootstrap';
 import { LoginService } from './login.service';
+
+interface ProtonPassItem {
+  createTime: number;
+  modifyTime: number;
+  data: {
+    type: string;
+    itemId: string;
+    metadata: { name: string; note: string };
+    content: {
+      itemEmail: string;
+      itemUsername: string;
+      password: string;
+      urls: string[];
+    };
+  };
+}
+
+interface ProtonPassVault {
+  name: string;
+  items: ProtonPassItem[];
+}
+
+interface ProtonPassExport {
+  vaults: { [key: string]: ProtonPassVault };
+}
 
 @Component({
   selector: 'app-root',
@@ -56,7 +80,7 @@ export class AppComponent {
     this.service.sortDirection = direction;
   }
 
-  addLogin(content: TemplateRef<any>) {
+  addLogin(content: TemplateRef<unknown>) {
     this.offcanvasService.open(content, { position: 'bottom' });
   }
 
@@ -69,53 +93,80 @@ export class AppComponent {
     this.selectedFileType = selectedFileType;
   }
 
-  async fileChange(event: any) {
-    const file = event.target.files[0];
+  async fileChange(event: Event) {
+    const input = event.target as HTMLInputElement;
+    const file = input.files?.[0];
     if (file && file.name.endsWith('.pgp')) {
-      const reader = new FileReader();
-      reader.onload = async (e: any) => {
-        const encryptedData = e.target.result;
-
-        const message = await openpgp.readMessage({
-          armoredMessage: encryptedData
+      try {
+        const encryptedData = await this.readFileAsText(file);
+        const message = await openpgp.readMessage({ armoredMessage: encryptedData });
+        const { data: decrypted } = await openpgp.decrypt({
+          message,
+          passwords: [this.password],
+          format: 'binary'
         });
-        try {
-          const { data: decrypted } = await openpgp.decrypt({
-            message,
-            passwords: [this.password],
-            format: 'binary'
-          });
+        this.password = '';
 
-          const decoder = new TextDecoder();
-          const decryptedText = decoder.decode(decrypted);
-          // there's some prepended and appended data that needs to be removed
-          const start = decryptedText.indexOf('{');
-          const end = decryptedText.lastIndexOf('"}');
-          const trimmedData = decryptedText.substring(start, end + 2);
-          const jsonData = JSON.parse(trimmedData);
-          console.log(jsonData);
-          this.processLoginData(jsonData);
-          this.offcanvasService.dismiss();
-        } catch (e) {
-          this.offcanvasService.dismiss();
-          console.error(e);
-          return;
+        const decoder = new TextDecoder();
+        const decryptedText = decoder.decode(decrypted);
+        // there's some prepended and appended data that needs to be removed
+        const start = decryptedText.indexOf('{');
+        const end = decryptedText.lastIndexOf('"}');
+        const trimmedData = decryptedText.substring(start, end + 2);
+
+        let jsonData: unknown;
+        try {
+          jsonData = JSON.parse(trimmedData);
+        } catch {
+          throw new Error('Failed to parse decrypted data as JSON');
         }
-      };
-      reader.readAsText(file);
+
+        if (!this.isProtonPassExport(jsonData)) {
+          throw new Error('Unexpected data format');
+        }
+
+        this.processLoginData(jsonData);
+        this.offcanvasService.dismiss();
+      } catch (e) {
+        this.password = '';
+        this.offcanvasService.dismiss();
+        console.error(e);
+      }
     }
   }
 
-  private processLoginData(data: any) {
-    // Process the JSON data as needed
+  private readFileAsText(file: File): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (e: ProgressEvent<FileReader>) => {
+        const result = e.target?.result;
+        if (typeof result === 'string') {
+          resolve(result);
+        } else {
+          reject(new Error('Failed to read file as text'));
+        }
+      };
+      reader.onerror = () => reject(new Error('FileReader error'));
+      reader.readAsText(file);
+    });
+  }
+
+  private isProtonPassExport(data: unknown): data is ProtonPassExport {
+    return (
+      typeof data === 'object' &&
+      data !== null &&
+      'vaults' in data &&
+      typeof (data as ProtonPassExport).vaults === 'object'
+    );
+  }
+
+  private processLoginData(data: ProtonPassExport) {
     const logins: ILogin[] = [];
-    for (const vault in data.vaults) {
-      const vaultData = data.vaults[vault];
+    for (const [, vaultData] of Object.entries(data.vaults)) {
       const vaultName = vaultData.name;
-      for (const login in vaultData.items) {
-        const loginData = vaultData.items[login];
+      for (const loginData of Object.values(vaultData.items)) {
         if (loginData.data.type === 'login') {
-          const loginInfo = {
+          const loginInfo: ILogin = {
             name: loginData.data.metadata.name || loginData.data.itemId,
             username: loginData.data.content.itemEmail || loginData.data.content.itemUsername,
             password: loginData.data.content.password,
@@ -124,8 +175,8 @@ export class AppComponent {
             vault: vaultName,
             createTime: new Date(loginData.createTime * 1000),
             modifyTime: new Date(loginData.modifyTime * 1000)
-          } as ILogin;
-          logins.push(new Login(loginInfo));
+          };
+          logins.push(loginInfo);
         }
       }
     }
@@ -143,25 +194,3 @@ export type ILogin = {
   createTime: Date;
   modifyTime: Date;
 };
-
-export class Login implements ILogin {
-  name: string;
-  username: string;
-  password: string;
-  urls: string[];
-  note: string;
-  vault: string;
-  createTime: Date;
-  modifyTime: Date;
-
-  constructor(data: ILogin) {
-    this.name = data.name;
-    this.username = data.username;
-    this.password = data.password;
-    this.urls = data.urls;
-    this.note = data.note;
-    this.vault = data.vault;
-    this.createTime = data.createTime;
-    this.modifyTime = data.modifyTime;
-  }
-}
