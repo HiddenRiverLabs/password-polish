@@ -1,0 +1,126 @@
+<router-outlet />
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-12 mt-3 mb-5">
+            <form>
+                <div class="mb-3 row">
+                    <label for="table-complete-search" class="col-xs-3 col-sm-auto col-form-label">Full text
+                        search:</label>
+                    <div class="col-xs-3 col-sm-auto">
+                        <input id="table-complete-search" type="text" class="form-control" name="searchTerm"
+                            [(ngModel)]="service.searchTerm" />
+                    </div>
+                    @if (service.loading$ | async) {
+                    <span class="col col-form-label">Loading...</span>
+                    }
+                </div>
+
+                <table class="table table-striped">
+                    <thead>
+                        <tr>
+                            <th scope="col" sortable="name" (sort)="onSort($event)">Name</th>
+                            <th scope="col" sortable="username" (sort)="onSort($event)">User</th>
+                            <th scope="col" sortable="password" (sort)="onSort($event)">Password</th>
+                            <th scope="col" sortable="modifyTime" (sort)="onSort($event)">ModifiedTime</th>
+                            <th scope="col" sortable="urls" (sort)="onSort($event)">URLs</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @for (login of logins$ | async; track login.name) {
+                        <tr>
+                            <td><ngb-highlight [result]="login.name" [term]="service.searchTerm" /></td>
+                            <td><ngb-highlight [result]="login.username" [term]="service.searchTerm" /></td>
+                            <td>{{ login.password ? '**********': '---' }}</td>
+                            <td><ngb-highlight [result]="login.modifyTime | date: 'short'"
+                                    [term]="service.searchTerm" /></td>
+                            <td>@for (url of login.urls; track url) {<a [href]="url" target="_blank" rel="noopener noreferrer"><ngb-highlight [result]="url" [term]="service.searchTerm" /></a>@if (!$last) {, }}</td>
+                        </tr>
+                        } @empty {
+                        <tr>
+                            <td colspan="5" class="text-center">No logins found</td>
+                        </tr>
+                        }
+                    </tbody>
+                </table>
+
+                <div class="d-flex justify-content-between p-2 mb-4">
+                    <ngb-pagination [collectionSize]="(total$ | async)!" [(page)]="service.page"
+                        [pageSize]="service.pageSize">
+                    </ngb-pagination>
+
+                    <select class="form-select page-size-select" name="pageSize" [(ngModel)]="service.pageSize" title="Select page size">
+                        <option [ngValue]="5">5 items per page</option>
+                        <option [ngValue]="10">10 items per page</option>
+                        <option [ngValue]="25">25 items per page</option>
+                    </select>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- plus button in lower right absolute positioned -->
+<button class="btn btn-danger plus-button" (click)="addLogin(content)">+</button>
+
+<ng-template #content let-offcanvas>
+    <div class="offcanvas-header">
+        <h4 class="offcanvas-title">Password Import</h4>
+        <button type="button" class="btn-close" aria-label="Close" (click)="offcanvas.dismiss('Cross click')"></button>
+    </div>
+    <div class="offcanvas-body">
+        <ngb-carousel #carousel>
+            <ng-template ngbSlide [id]="'source'">
+                <!--
+                Pick where you're importing from by clicking a button
+                -->
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="btn-group" role="group" aria-label="Select Password Source">
+                        @for (source of sourceOptions; track source) {
+                        <button type="button" class="btn btn-outline-primary bg-black" [title]="source"
+                            (click)="selectSource(source); carousel.select('fileType')" [attr.aria-label]="source">
+                            <img [src]="'icons/'+source+'Logo.svg'" [alt]="source" [title]="source" class="img-fluid" />
+                        </button>
+                        }
+                    </div>
+                </div>
+            </ng-template>
+            <ng-template ngbSlide [id]="'fileType'">
+                <!--
+                Pick file type being imported. If PGP, show and require password
+                -->
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="btn-group" role="group" aria-label="Select file type to import">
+                        @for (fileType of fileTypes; track fileType) {
+                        <button type="button" class="btn btn-primary" [title]="fileType"
+                            (click)="selectFileType(fileType); selectedFileType === 'PGP' ? carousel.select('PGP') : carousel.select('file')">
+                            {{fileType}}
+                        </button>
+                        }
+                    </div>
+                </div>
+            </ng-template>
+            <ng-template ngbSlide [id]="'PGP'">
+                <!--
+                Show file picker
+                -->
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" class="form-control" id="password" [(ngModel)]="password" />
+                        <button type="button" class="btn btn-primary mt-2" [disabled]="password === ''"
+                            (click)="carousel.select('file')">Next</button>
+                    </div>
+                </div>
+            </ng-template>
+            <ng-template ngbSlide [id]="'file'">
+                <div class="d-flex justify-content-center align-items-center">
+                    <div class="form-group">
+                        <label for="file">Select a file</label>
+                        <input type="file" class="form-control" id="file" accept=".{{selectedFileType.toLowerCase()}}"
+                            (change)="fileChange($event)">
+                    </div>
+                </div>
+            </ng-template>
+        </ngb-carousel>
+    </div>
+</ng-template>
